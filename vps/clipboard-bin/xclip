@@ -1,0 +1,23 @@
+#!/usr/bin/python3
+import os
+import socket
+import sys
+
+args = sys.argv[1:]
+if not any(flag in args for flag in ("-o", "-out")):
+    sys.exit(1)
+target = next((args[i+1] for i,x in enumerate(args[:-1]) if x in ("-t","-target")), "")
+if target == "TARGETS":
+    print("image/png")
+    sys.exit(0)
+if target != "image/png":
+    sys.exit(1)
+with socket.socket(socket.AF_UNIX) as sock:
+    sock.settimeout(15)
+    sock.connect(os.environ["AGY_CLIP_SOCKET"])
+    block = sock.recv(65536)
+    if not block:
+        sys.exit(1)
+    while block:
+        sys.stdout.buffer.write(block)
+        block = sock.recv(65536)

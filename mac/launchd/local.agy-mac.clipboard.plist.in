@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>local.agy-mac.clipboard</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>@MAC_LIB@/read-png</string>
+	</array>
+	<key>Sockets</key>
+	<dict>
+		<key>Listener</key>
+		<dict>
+			<key>SockPathMode</key>
+			<integer>384</integer>
+			<key>SockPathName</key>
+			<string>@MAC_LIB@/clipboard.sock</string>
+		</dict>
+	</dict>
+	<key>inetdCompatibility</key>
+	<dict>
+		<key>Wait</key>
+		<false/>
+	</dict>
+</dict>
+</plist>

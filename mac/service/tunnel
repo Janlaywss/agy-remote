@@ -1,0 +1,18 @@
+#!/usr/bin/env python3
+import json
+import os
+from pathlib import Path, PurePosixPath
+import shlex
+import subprocess
+
+lib = Path.home() / ".local/share/agy-mac"
+config = json.loads((lib / "connection.json").read_text())
+state = PurePosixPath(config["vps_home"]) / ".local/state/agy-mac"
+remote = str(state / "tools.sock")
+ssh = ["/usr/bin/ssh", "-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
+       "-o", "IdentitiesOnly=yes", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3",
+       "-o", "ConnectTimeout=8", "-i", config["identity"], "-l", config["user"]]
+prepare = shlex.join(["mkdir", "-p", "-m", "700", str(state)]) + " && " + shlex.join(["rm", "-f", remote])
+subprocess.run([*ssh, config["host"], prepare], check=True)
+os.execv(ssh[0], [*ssh, "-N", "-o", "ExitOnForwardFailure=yes", "-R",
+                  remote + ":" + str(lib / "tools.sock"), config["host"]])

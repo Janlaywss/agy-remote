@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+import json
+import os
+from pathlib import Path, PurePosixPath
+import shlex
+import sys
+import uuid
+
+lib = Path.home() / ".local/share/agy-mac"
+config = json.loads((lib / "connection.json").read_text())
+vps = PurePosixPath(config["vps_home"])
+state = vps / ".local/state/agy-mac"
+clip = str(state / f"clip-{uuid.uuid4().hex}.sock")
+remote = 'export PATH="$HOME/.local/state/agy-mac/clipboard-bin:$PATH"; exec env ' + shlex.join([
+    "AGY_CLIP_SOCKET=" + clip, "DISPLAY=:agy-mac", "AGY_MAC_CWD=" + os.getcwd(),
+    str(vps / ".local/bin/agy"), *sys.argv[1:],
+])
+tty = "-t" if sys.stdin.isatty() else "-T"
+os.execv("/usr/bin/caffeinate", [
+    "caffeinate", "-i", "/usr/bin/ssh", tty, "-R", clip + ":" + str(lib / "clipboard.sock"),
+    "-o", "IdentitiesOnly=yes", "-i", config["identity"], "-l", config["user"], config["host"], remote,
+])

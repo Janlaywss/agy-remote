@@ -1,0 +1,17 @@
+.DS_Store
+__pycache__/
+*.pyc
+/build/
+*.sock
+*.log
+
+/.idea/
+
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+/.ssh/
+/dist/
+/connection.json

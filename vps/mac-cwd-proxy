@@ -1,0 +1,82 @@
+#!/usr/bin/python3
+"""Serve agy over stdio. Open a fresh tunnel stream for each Mac RPC."""
+import json
+import os
+import posixpath
+import shlex
+import socket
+import sys
+import time
+from pathlib import Path
+
+endpoint = str(Path.home() / ".local/state/agy-mac/tools.sock")
+base = os.environ.get("AGY_MAC_CWD")
+schema_file = Path(__file__).with_name("mac-tools.json")
+
+def forward(request):
+    # Only retry connection setup. A transmitted command may already have run.
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as stream:
+        for attempt in range(5):
+            try:
+                stream.connect(endpoint)
+                break
+            except (FileNotFoundError, ConnectionRefusedError):
+                if attempt == 4:
+                    raise
+                time.sleep(1)
+        stream.settimeout(3630)
+        stream.sendall(json.dumps(request).encode() + b"\n")
+        with stream.makefile("rb") as response:
+            line = response.readline()
+            if not line:
+                raise ConnectionError("Mac tunnel closed before returning a result")
+            return json.loads(line)
+
+for line in sys.stdin.buffer:
+    try:
+        req = json.loads(line)
+        if not isinstance(req, dict):
+            raise ValueError("Expected a JSON object")
+    except (ValueError, RecursionError):
+        print(json.dumps({"jsonrpc":"2.0","id":None,"error":{"code":-32700,"message":"Invalid JSON RPC object"}}),flush=True)
+        continue
+    if "id" not in req:
+        continue
+    reply = {"jsonrpc": "2.0", "id": req["id"]}
+    method = req.get("method")
+    params = req.get("params", {})
+    try:
+        if method == "initialize":
+            version = params.get("protocolVersion")
+            reply["result"] = {"protocolVersion": version if version in ("2024-11-05","2025-03-26","2025-06-18","2025-11-25") else "2025-06-18",
+                               "capabilities": {"tools": {}}, "serverInfo": {"name": "agy-mac", "version": "1.1"}}
+        elif method == "tools/list":
+            reply["result"] = json.loads(schema_file.read_text())
+        elif method == "ping":
+            reply["result"] = {}
+        else:
+            if method == "tools/call" and params.get("name") == "mac_shell":
+                args = params.get("arguments")
+                if not isinstance(args, dict) or not isinstance(args.get("command"), str):
+                    raise ValueError("mac_shell requires a string command")
+                if not isinstance(args.get("cwd", "."), str):
+                    raise ValueError("cwd must be a string")
+                if "timeout" in args and (type(args["timeout"]) is not int or not 1 <= args["timeout"] <= 3600):
+                    raise ValueError("timeout must be an integer from 1 to 3600")
+                cwd = args.get("cwd", ".")
+                if base and not cwd.startswith("~"):
+                    args["cwd"] = posixpath.join(base, cwd)
+                request = {"command": args["command"]}
+                if "timeout" in args:
+                    request["timeout"] = args["timeout"]
+                args["command"] = "exec ~/.local/bin/agy-mac-job run <<< " + shlex.quote(json.dumps(request))
+                args["timeout"] = 30
+            reply = forward(req)
+    except (ValueError, TypeError, KeyError, AttributeError) as exc:
+        reply["error"] = {"code": -32602, "message": str(exc)}
+    except OSError as exc:
+        reply["error"] = {"code": -32603, "message": f"Mac connection error: {exc}. Check connectivity before retrying; a sent command may already have run."}
+    except Exception as exc:
+        print(f"mac MCP request failed: {type(exc).__name__}", file=sys.stderr, flush=True)
+        reply["error"] = {"code": -32603, "message": "Mac MCP request failed: " + type(exc).__name__}
+    print(json.dumps(reply), flush=True)
